@@ -8,9 +8,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// prisma/schema.prisma
 datasource db {
-  provider = "mysql"
-  url      = "mysql://root:@localhost:3306/ecommerce"
+  provider  = "postgresql"
+  url  	    = env("DATABASE_URL")
 }
 
 model Product {
