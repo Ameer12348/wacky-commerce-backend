@@ -3,229 +3,122 @@ const prisma = new PrismaClient();
 
 async function getAllProducts(request, response) {
   const mode = request.query.mode || "";
-  // checking if we are on the admin products page because we don't want to have filtering, sorting and pagination there
   if (mode === "admin") {
     try {
-      const adminProducts = await prisma.product.findMany({});
+      const adminProducts = await prisma.product.findMany({
+        include: {
+          variants: true,
+        },
+      });
       return response.json(adminProducts);
     } catch (error) {
       return response.status(500).json({ error: "Error fetching products" });
     }
   } else {
     const dividerLocation = request.url.indexOf("?");
-    let filterObj = {};
+    const page = Number(request.query.page) || 1;
     let sortObj = {};
     let sortByValue = "defaultSort";
 
-    // getting current page
-    const page = Number(request.query.page) ? Number(request.query.page) : 1;
+    // Arrays to hold filters
+    let filterArray = [];
 
+    // Parse query parameters if present
     if (dividerLocation !== -1) {
-      const queryArray = request.url
-        .substring(dividerLocation + 1, request.url.length)
-        .split("&");
-
-      let filterType;
-      let filterArray = [];
+      const queryArray = request.url.substring(dividerLocation + 1).split("&");
 
       for (let i = 0; i < queryArray.length; i++) {
-        // checking whether it is filter mode or price filter
-        if (
-          queryArray[i].indexOf("filters") !== -1 &&
-          queryArray[i].indexOf("price") !== -1
-        ) {
-          // taking price par. Of course I could write it much simpler: filterType="price"
-          filterType = queryArray[i].substring(
-            queryArray[i].indexOf("price"),
-            queryArray[i].indexOf("price") + "price".length
-          );
-        }
+        if (queryArray[i].startsWith("filters.")) {
+          const parts = queryArray[i].split("$");
+          if (parts.length === 2) {
+            const fieldPart = parts[0].substring("filters.".length); // e.g., "price"
+            const operatorValue = parts[1].split("=");
+            if (operatorValue.length === 2) {
+              const filterType = fieldPart; // e.g., "price", "rating"
+              const filterOperator = operatorValue[0]; // e.g., "lte"
+              let filterValue = operatorValue[1]; // e.g., "3000"
 
-        // checking whether it is filter mode and rating filter
-        if (
-          queryArray[i].indexOf("filters") !== -1 &&
-          queryArray[i].indexOf("rating") !== -1
-        ) {
-          // taking "rating" part. Of course I could write it much simpler: filterType="rating"
-          filterType = queryArray[i].substring(
-            queryArray[i].indexOf("rating"),
-            queryArray[i].indexOf("rating") + "rating".length
-          );
-        }
+              // Convert value to number unless it’s a category filter
+              if (filterType !== "category") {
+                filterValue = parseInt(filterValue);
+              }
 
-        // checking whether it is filter mode and category filter
-        if (
-          queryArray[i].indexOf("filters") !== -1 &&
-          queryArray[i].indexOf("category") !== -1
-        ) {
-          // getting "category" part
-          filterType = "category";
-        }
-
-        if (
-          queryArray[i].indexOf("filters") !== -1 &&
-          queryArray[i].indexOf("inStock") !== -1
-        ) {
-          // getting "inStock" part.  Of course I could write it much simpler: filterType="inStock"
-          filterType = queryArray[i].substring(
-            queryArray[i].indexOf("inStock"),
-            queryArray[i].indexOf("inStock") + "inStock".length
-          );
-        }
-
-        if (
-          queryArray[i].indexOf("filters") !== -1 &&
-          queryArray[i].indexOf("outOfStock") !== -1
-        ) {
-          // getting "outOfStock" part.  Of course I could write it much simpler: filterType="outOfStock"
-          filterType = queryArray[i].substring(
-            queryArray[i].indexOf("outOfStock"),
-            queryArray[i].indexOf("outOfStock") + "outOfStock".length
-          );
-        }
-
-        if (queryArray[i].indexOf("sort") !== -1) {
-          // getting sort value from the query
+              filterArray.push({ filterType, filterOperator, filterValue });
+            }
+          }
+        } else if (queryArray[i].startsWith("sort=")) {
           sortByValue = queryArray[i].substring(queryArray[i].indexOf("=") + 1);
         }
-
-        // checking whether in the given query filters mode is on
-        if (queryArray[i].indexOf("filters") !== -1) {
-          let filterValue;
-          // checking that it is not filter by category. I am doing it so I can avoid converting string to number
-          if (queryArray[i].indexOf("category") === -1) {
-            // taking value part. It is the part where number value of the query is located and I am converting it to the number type because it is string by default
-            filterValue = parseInt(
-              queryArray[i].substring(
-                queryArray[i].indexOf("=") + 1,
-                queryArray[i].length
-              )
-            );
-          } else {
-            // if it is filter by category
-            filterValue = queryArray[i].substring(
-              queryArray[i].indexOf("=") + 1,
-              queryArray[i].length
-            );
-          }
-
-          // getting operator for example: lte, gte, gt, lt....
-          const filterOperator = queryArray[i].substring(
-            queryArray[i].indexOf("$") + 1,
-            queryArray[i].indexOf("=") - 1
-          );
-
-          // All of it I add to the filterArray
-          // example for current state of filterArray:
-          /*
-                  [
-                  { filterType: 'price', filterOperator: 'lte', filterValue: 3000 },
-                  { filterType: 'rating', filterOperator: 'gte', filterValue: 0 }
-                  ]
-                  */
-          filterArray.push({ filterType, filterOperator, filterValue });
-        }
       }
-      for (let item of filterArray) {
-        filterObj = {
-          ...filterObj,
-          [item.filterType]: {
-            [item.filterOperator]: item.filterValue,
-          },
+    }
+
+    // Define valid fields for Product and ProductVariant
+    const productFields = ["rating", "title", "manufacturer"];
+    const variantFields = ["price", "inStock"];
+
+    // Separate filters
+    const productFilters = {};
+    const variantFilters = {};
+    let categoryFilter = null;
+
+    for (let item of filterArray) {
+      if (item.filterType === "category") {
+        categoryFilter = item;
+      } else if (variantFields.includes(item.filterType)) {
+        variantFilters[item.filterType] = {
+          [item.filterOperator]: item.filterValue,
+        };
+      } else if (productFields.includes(item.filterType)) {
+        productFilters[item.filterType] = {
+          [item.filterOperator]: item.filterValue,
         };
       }
+      // Unsupported filter types (e.g., "outOfStock") are ignored
     }
 
-    let whereClause = { ...filterObj }; // Include other filters if any
-
-    // Remove category filter from whereClause and use it separately
-    if (filterObj.category && filterObj.category.equals) {
-      delete whereClause.category; // Remove category filter from whereClause
+    // Construct where clause
+    let whereClause = { ...productFilters };
+    if (Object.keys(variantFilters).length > 0) {
+      whereClause.variants = {
+        some: variantFilters, // Filter products with at least one matching variant
+      };
+    }
+    if (categoryFilter) {
+      whereClause.category = {
+        name: { equals: categoryFilter.filterValue },
+      };
     }
 
+    // Set sorting
     if (sortByValue === "defaultSort") {
       sortObj = {};
     } else if (sortByValue === "titleAsc") {
-      sortObj = {
-        title: "asc",
-      };
+      sortObj = { title: "asc" };
     } else if (sortByValue === "titleDesc") {
-      sortObj = {
-        title: "desc",
-      };
+      sortObj = { title: "desc" };
     } else if (sortByValue === "lowPrice") {
-      sortObj = {
-        price: "asc",
-      };
+      sortObj = { variants: { some: { price: "asc" } } }; // Sort by variant price
     } else if (sortByValue === "highPrice") {
-      sortObj = {
-        price: "desc",
-      };
+      sortObj = { variants: { some: { price: "desc" } } };
     }
 
-    let products;
-
-    if (Object.keys(filterObj).length === 0) {
-      products = await prisma.product.findMany({
-        // this is formula for pagination: (page - 1) * limit(take)
+    // Fetch products
+    try {
+      const products = await prisma.product.findMany({
         skip: (page - 1) * 10,
         take: 12,
         include: {
-          category: {
-            select: {
-              name: true,
-            },
-          },
+          category: { select: { name: true } },
           variants: true,
         },
+        where: whereClause,
         orderBy: sortObj,
       });
-    } else {
-      // Check if category filter is present
-      if (filterObj.category && filterObj.category.equals) {
-        products = await prisma.product.findMany({
-          // this is formula for pagination: (page - 1) * limit(take)
-          skip: (page - 1) * 10,
-          take: 12,
-          include: {
-            category: {
-              select: {
-                name: true,
-              },
-            },
-            variants: true,
-          },
-          where: {
-            ...whereClause,
-            category: {
-              name: {
-                equals: filterObj.category.equals,
-              },
-            },
-          },
-          orderBy: sortObj,
-        });
-      } else {
-        // If no category filter, use whereClause
-        products = await prisma.product.findMany({
-          // this is formula for pagination: (page - 1) * limit(take)
-          skip: (page - 1) * 10,
-          take: 12,
-          include: {
-            category: {
-              select: {
-                name: true,
-              },
-            },
-            variants: true,
-          },
-          where: whereClause,
-          orderBy: sortObj,
-        });
-      }
+      return response.json(products);
+    } catch (error) {
+      console.error(error);
+      return response.status(500).json({ error: "Error fetching products" });
     }
-
-    return response.json(products);
   }
 }
 
