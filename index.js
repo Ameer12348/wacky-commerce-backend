@@ -1,6 +1,5 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const fileUpload = require("express-fileupload");
 const productsRouter = require("./routes/products");
 const productImagesRouter = require("./routes/productImages");
 const categoryRouter = require("./routes/category");
@@ -12,7 +11,6 @@ const slugRouter = require("./routes/slugs");
 const orderProductRouter = require("./routes/customer_order_product");
 const wishlistRouter = require("./routes/wishlist");
 var cors = require("cors");
-
 const app = express();
 //
 app.use(express.json());
@@ -23,7 +21,8 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-app.use(fileUpload());
+app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static("uploads"));
 
 app.use("/api/products", productsRouter);
 app.use("/api/categories", categoryRouter);

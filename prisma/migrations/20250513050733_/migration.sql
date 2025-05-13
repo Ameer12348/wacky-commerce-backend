@@ -4,14 +4,23 @@ CREATE TABLE "Product" (
     "slug" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "mainImage" TEXT NOT NULL,
-    "price" INTEGER NOT NULL DEFAULT 0,
     "rating" INTEGER NOT NULL DEFAULT 0,
     "description" TEXT NOT NULL,
     "manufacturer" TEXT NOT NULL,
-    "inStock" INTEGER NOT NULL DEFAULT 1,
     "categoryId" TEXT NOT NULL,
 
     CONSTRAINT "Product_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProductVariant" (
+    "id" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "price" INTEGER NOT NULL,
+    "inStock" INTEGER NOT NULL,
+
+    CONSTRAINT "ProductVariant_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -58,7 +67,7 @@ CREATE TABLE "Customer_order" (
 CREATE TABLE "customer_order_product" (
     "id" TEXT NOT NULL,
     "customerOrderId" TEXT NOT NULL,
-    "productId" TEXT NOT NULL,
+    "productVariantId" TEXT NOT NULL,
     "quantity" INTEGER NOT NULL,
 
     CONSTRAINT "customer_order_product_pkey" PRIMARY KEY ("id")
@@ -76,7 +85,7 @@ CREATE TABLE "Category" (
 -- CreateTable
 CREATE TABLE "Wishlist" (
     "id" TEXT NOT NULL,
-    "productId" TEXT NOT NULL,
+    "productVariantId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
 
     CONSTRAINT "Wishlist_pkey" PRIMARY KEY ("id")
@@ -95,13 +104,16 @@ CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
 ALTER TABLE "Product" ADD CONSTRAINT "Product_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "ProductVariant" ADD CONSTRAINT "ProductVariant_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "customer_order_product" ADD CONSTRAINT "customer_order_product_customerOrderId_fkey" FOREIGN KEY ("customerOrderId") REFERENCES "Customer_order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "customer_order_product" ADD CONSTRAINT "customer_order_product_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "customer_order_product" ADD CONSTRAINT "customer_order_product_productVariantId_fkey" FOREIGN KEY ("productVariantId") REFERENCES "ProductVariant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Wishlist" ADD CONSTRAINT "Wishlist_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Wishlist" ADD CONSTRAINT "Wishlist_productVariantId_fkey" FOREIGN KEY ("productVariantId") REFERENCES "ProductVariant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Wishlist" ADD CONSTRAINT "Wishlist_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

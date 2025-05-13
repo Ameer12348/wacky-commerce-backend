@@ -10,6 +10,7 @@ async function getProductBySlug(request, response) {
     },
     include: {
       category: true,
+      variants: true,
     },
   });
 
